@@ -9,12 +9,20 @@ import (
 
 func createGraph(data map[rune]int) string {
 	graph := make([]string, 0)
+	character := ""
 	for k, n := range data {
-		if k == '\n' {
-			continue
+		switch k {
+		case '\n':
+			character = "'\\n'"
+		case '\t':
+			character = "'\\t'"
+		case ' ':
+			character = "' '"
+		default:
+			character = string(k)
 		}
 		bar := strings.Repeat("█", n)
-		graph = append(graph, fmt.Sprintf("[%2c : %-3d]: ▌%s", k, n, bar))
+		graph = append(graph, fmt.Sprintf("[%-4s:%3d] ▌%s", character, n, bar))
 	}
 	return strings.Join(graph, "\n")
 }
