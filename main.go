@@ -5,6 +5,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -16,8 +17,16 @@ func createGraph(data map[rune]int) string {
 		}
 	}
 
+	keys := make([]rune, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+
 	graph := make([]string, 0, len(data))
-	for k, n := range data {
+	for _, k := range keys {
+		n := data[k]
+
 		var character string
 		switch k {
 		case '\n':
