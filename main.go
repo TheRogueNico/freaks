@@ -10,10 +10,15 @@ import (
 )
 
 func createGraph(data map[rune]int) string {
-	max := 0
+	// we need this check to avoid div by zero
+	if len(data) == 0 {
+		return "input is empty!"
+	}
+
+	maxCount := 0
 	for _, n := range data {
-		if n > max {
-			max = n
+		if n > maxCount {
+			maxCount = n
 		}
 	}
 
@@ -39,7 +44,7 @@ func createGraph(data map[rune]int) string {
 			character = string(k)
 		}
 
-		barLen := int(math.Round(float64(n) / float64(max) * 40))
+		barLen := int(math.Round(float64(n) / float64(maxCount) * 40))
 		bar := strings.Repeat("█", barLen)
 		graph = append(graph, fmt.Sprintf("[%-4s:%3d] ▌%s", character, n, bar))
 	}
