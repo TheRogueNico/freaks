@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -21,15 +22,10 @@ var (
 	subtleStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241"))
 
-	promptStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("99"))
-
-	inputBoxStyle = lipgloss.NewStyle().
+	boxStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("99")).
-			Padding(0, 1).
-			Width(40)
+			Padding(0, 1)
 
 	labelStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("228")).
@@ -60,13 +56,21 @@ const (
 )
 
 type model struct {
-	screen screen
-	input  []rune
-	graph  string
+	screen   screen
+	textarea textarea.Model
+	graph    string
 }
 
 func initialModel() model {
-	return model{screen: screenInput}
+	ta := textarea.New()
+	ta.Placeholder = "Type or paste text here, then press ctrl+d to analyze."
+	ta.Prompt = ""
+	ta.ShowLineNumbers = false
+	ta.SetWidth(60)
+	ta.SetHeight(12)
+	ta.Focus()
+
+	return model{screen: screenInput, textarea: ta}
 }
 
 func (m model) Init() tea.Cmd {
@@ -74,42 +78,32 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	keyMsg, ok := msg.(tea.KeyPressMsg)
-	if !ok {
-		return m, nil
-	}
-
 	switch m.screen {
 	case screenInput:
-		return m.updateInput(keyMsg)
+		return m.updateInput(msg)
 	case screenGraph:
-		return m.updateGraph(keyMsg)
+		if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
+			return m.updateGraph(keyMsg)
+		}
 	}
 	return m, nil
 }
 
-func (m model) updateInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "ctrl+c":
-		return m, tea.Quit
-	case "ctrl+d":
-		m.graph = createGraph(charFrequencies(string(m.input)))
-		m.screen = screenGraph
-		return m, nil
-	case "enter":
-		m.input = append(m.input, '\n')
-	case "backspace":
-		if len(m.input) > 0 {
-			m.input = m.input[:len(m.input)-1]
-		}
-	case "tab":
-		m.input = append(m.input, '\t')
-	default:
-		if msg.Text != "" {
-			m.input = append(m.input, []rune(msg.Text)...)
+func (m model) updateInput(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
+		switch keyMsg.String() {
+		case "ctrl+c":
+			return m, tea.Quit
+		case "ctrl+d":
+			m.graph = createGraph(charFrequencies(m.textarea.Value()))
+			m.screen = screenGraph
+			return m, nil
 		}
 	}
-	return m, nil
+
+	var cmd tea.Cmd
+	m.textarea, cmd = m.textarea.Update(msg)
+	return m, cmd
 }
 
 func (m model) updateGraph(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -140,8 +134,7 @@ func (m model) viewInput() string {
 	b.WriteString("\n")
 	b.WriteString(subtleStyle.Render("Type or paste text, then press ctrl+d to analyze (ctrl+c to quit)."))
 	b.WriteString("\n\n")
-	b.WriteString(promptStyle.Render("> "))
-	b.WriteString(inputBoxStyle.Render(string(m.input)))
+	b.WriteString(boxStyle.Render(m.textarea.View()))
 	b.WriteString("\n")
 	return b.String()
 }
