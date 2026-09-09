@@ -14,38 +14,49 @@ import (
 
 const maxBarWidth = 40
 
+// Catppuccin Mocha palette.
+var (
+	ctpMauve    = lipgloss.Color("#cba6f7")
+	ctpPeach    = lipgloss.Color("#fab387")
+	ctpTeal     = lipgloss.Color("#94e2d5")
+	ctpSubtext1 = lipgloss.Color("#bac2de")
+	ctpOverlay1 = lipgloss.Color("#7f849c")
+	ctpOverlay0 = lipgloss.Color("#6c7086")
+	ctpSurface2 = lipgloss.Color("#585b70")
+)
+
 var (
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("212"))
+			Foreground(ctpMauve)
 
 	subtleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241"))
+			Foreground(ctpOverlay1)
 
 	boxStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("99")).
+			BorderForeground(ctpSurface2).
 			Padding(0, 1)
 
 	labelStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("228")).
+			Foreground(ctpSubtext1).
 			Width(6)
 
 	countStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("245")).
+			Foreground(ctpPeach).
 			Width(4).
 			Align(lipgloss.Right)
 
 	barStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("86"))
+			Foreground(ctpTeal)
 
 	helpStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241")).
+			Foreground(ctpOverlay1).
 			MarginTop(1)
 
 	emptyStyle = lipgloss.NewStyle().
 			Italic(true).
-			Foreground(lipgloss.Color("241"))
+			Foreground(ctpOverlay0)
 )
 
 type screen int
