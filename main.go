@@ -117,20 +117,19 @@ func (m model) updateGraph(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() tea.View {
-	var v tea.View
-	v.AltScreen = true
-
+	content := m.viewInput()
 	if m.screen == screenGraph {
-		v.SetContent(m.viewGraph())
-	} else {
-		v.SetContent(m.viewInput())
+		content = m.viewGraph()
 	}
+
+	v := tea.NewView(content)
+	v.AltScreen = true
 	return v
 }
 
 func (m model) viewInput() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Character Frequency Grapher"))
+	b.WriteString(titleStyle.Render("Freaks"))
 	b.WriteString("\n")
 	b.WriteString(subtleStyle.Render("Type or paste text, then press ctrl+d to analyze (ctrl+c to quit)."))
 	b.WriteString("\n\n")
@@ -145,7 +144,7 @@ func (m model) viewGraph() string {
 	b.WriteString("\n\n")
 	b.WriteString(m.graph)
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("q to quit  ·  r to analyze new input"))
+	b.WriteString(helpStyle.Render("q to quit | r to analyze new input"))
 	return b.String()
 }
 
