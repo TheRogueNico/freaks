@@ -65,7 +65,7 @@ func initialModel() model {
 	ta := textarea.New()
 	ta.Placeholder = "Type or paste text here, then press ctrl+d to analyze."
 	ta.Prompt = ""
-	ta.ShowLineNumbers = false
+	ta.ShowLineNumbers = true
 	ta.SetWidth(60)
 	ta.SetHeight(12)
 	ta.Focus()
