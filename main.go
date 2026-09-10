@@ -2,22 +2,22 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"os"
 	"slices"
 	"strings"
+	"unicode"
 
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/NimbleMarkets/ntcharts/v2/barchart"
 )
 
-const maxBarWidth = 40
+const chartWidth = 50
 
 // Catppuccin Mocha palette.
 var (
 	ctpMauve    = lipgloss.Color("#cba6f7")
-	ctpPeach    = lipgloss.Color("#fab387")
 	ctpTeal     = lipgloss.Color("#94e2d5")
 	ctpSubtext1 = lipgloss.Color("#bac2de")
 	ctpOverlay1 = lipgloss.Color("#7f849c")
@@ -39,13 +39,7 @@ var (
 			Padding(0, 1)
 
 	labelStyle = lipgloss.NewStyle().
-			Foreground(ctpSubtext1).
-			Width(6)
-
-	countStyle = lipgloss.NewStyle().
-			Foreground(ctpPeach).
-			Width(4).
-			Align(lipgloss.Right)
+			Foreground(ctpSubtext1)
 
 	barStyle = lipgloss.NewStyle().
 			Foreground(ctpTeal)
@@ -69,7 +63,8 @@ const (
 type model struct {
 	screen   screen
 	textarea textarea.Model
-	graph    string
+	chart    barchart.Model
+	isEmpty  bool
 }
 
 func initialModel() model {
@@ -106,7 +101,11 @@ func (m model) updateInput(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		case "ctrl+d":
-			m.graph = createGraph(charFrequencies(m.textarea.Value()))
+			freq := charFrequencies(m.textarea.Value())
+			m.isEmpty = len(freq) == 0
+			if !m.isEmpty {
+				m.chart = drawChart(freq)
+			}
 			m.screen = screenGraph
 			return m, nil
 		}
@@ -153,7 +152,11 @@ func (m model) viewGraph() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Character Frequency"))
 	b.WriteString("\n\n")
-	b.WriteString(m.graph)
+	if m.isEmpty {
+		b.WriteString(emptyStyle.Render("input is empty!"))
+	} else {
+		b.WriteString(m.chart.View())
+	}
 	b.WriteString("\n")
 	b.WriteString(helpStyle.Render("q to quit | r to analyze new input"))
 	return b.String()
@@ -162,55 +165,41 @@ func (m model) viewGraph() string {
 func charFrequencies(s string) map[rune]int {
 	freq := make(map[rune]int, len(s))
 	for _, r := range s {
+		if unicode.IsSpace(r) {
+			continue
+		}
 		freq[r]++
 	}
 	return freq
 }
 
-func createGraph(data map[rune]int) string {
-	if len(data) == 0 {
-		return emptyStyle.Render("input is empty!")
-	}
-
-	maxCount := 0
-	for _, n := range data {
-		maxCount = max(maxCount, n)
-	}
-
-	keys := make([]rune, 0, len(data))
-	for k := range data {
+func drawChart(freq map[rune]int) barchart.Model {
+	keys := make([]rune, 0, len(freq))
+	for k := range freq {
 		keys = append(keys, k)
 	}
 	slices.Sort(keys)
 
-	rows := make([]string, 0, len(data))
+	data := make([]barchart.BarData, 0, len(keys))
 	for _, k := range keys {
-		n := data[k]
-		barLen := int(math.Round(float64(n) / float64(maxCount) * maxBarWidth))
-		bar := barStyle.Render(strings.Repeat("█", barLen))
-
-		row := lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			labelStyle.Render(displayChar(k)),
-			countStyle.Render(fmt.Sprintf("%d", n)),
-			"  ▌"+bar,
-		)
-		rows = append(rows, row)
+		data = append(data, barchart.BarData{
+			Label: string(k),
+			Values: []barchart.BarValue{
+				{Name: string(k), Value: float64(freq[k]), Style: barStyle},
+			},
+		})
 	}
-	return strings.Join(rows, "\n")
-}
 
-func displayChar(r rune) string {
-	switch r {
-	case '\n':
-		return `'\n'`
-	case '\t':
-		return `'\t'`
-	case ' ':
-		return "' '"
-	default:
-		return string(r)
-	}
+	bc := barchart.New(chartWidth, len(data),
+		barchart.WithHorizontalBars(),
+		barchart.WithDataSet(data),
+		barchart.WithNoAutoBarWidth(),
+		barchart.WithBarWidth(1),
+		barchart.WithBarGap(0),
+		barchart.WithStyles(barStyle, labelStyle),
+	)
+	bc.Draw()
+	return bc
 }
 
 func main() {
