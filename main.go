@@ -13,7 +13,10 @@ import (
 	"github.com/NimbleMarkets/ntcharts/v2/barchart"
 )
 
-const chartWidth = 50
+const (
+	chartWidth  = 64
+	chartHeight = 20
+)
 
 // Catppuccin Mocha palette.
 var (
@@ -76,7 +79,10 @@ func initialModel() model {
 	ta.SetHeight(12)
 	ta.Focus()
 
-	return model{screen: screenInput, textarea: ta}
+	return model{
+		screen:   screenInput,
+		textarea: ta,
+	}
 }
 
 func (m model) Init() tea.Cmd {
@@ -162,18 +168,30 @@ func (m model) viewGraph() string {
 	return b.String()
 }
 
-func charFrequencies(s string) map[rune]int {
-	freq := make(map[rune]int, len(s))
+func charFrequencies(s string) map[rune]float64 {
+	freq := make(map[rune]float64, len(s))
+	var total float64
+
 	for _, r := range s {
 		if unicode.IsSpace(r) {
 			continue
 		}
+
 		freq[r]++
+		total++
+	}
+
+	if total == 0 {
+		return freq
+	}
+
+	for r, count := range freq {
+		freq[r] = count / total
 	}
 	return freq
 }
 
-func drawChart(freq map[rune]int) barchart.Model {
+func drawChart(freq map[rune]float64) barchart.Model {
 	keys := make([]rune, 0, len(freq))
 	for k := range freq {
 		keys = append(keys, k)
@@ -185,17 +203,19 @@ func drawChart(freq map[rune]int) barchart.Model {
 		data = append(data, barchart.BarData{
 			Label: string(k),
 			Values: []barchart.BarValue{
-				{Name: string(k), Value: float64(freq[k]), Style: barStyle},
+				{
+					Name:  string(k),
+					Value: freq[k],
+					Style: barStyle,
+				},
 			},
 		})
 	}
 
-	bc := barchart.New(chartWidth, len(data),
-		barchart.WithHorizontalBars(),
+	bc := barchart.New(chartWidth, chartHeight,
 		barchart.WithDataSet(data),
-		barchart.WithNoAutoBarWidth(),
 		barchart.WithBarWidth(1),
-		barchart.WithBarGap(0),
+		barchart.WithBarGap(1),
 		barchart.WithStyles(barStyle, labelStyle),
 	)
 	bc.Draw()
