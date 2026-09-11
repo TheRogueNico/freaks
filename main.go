@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -9,87 +11,168 @@ import (
 	"unicode"
 )
 
-// letterFreq counts occurrences of each letter.
+// errInvalidFlagValue signals a usage error distinct from flag.ErrHelp,
+// so run() maps it to exit code 2.
+var errInvalidFlagValue = errors.New("invalid flag value")
+
+// letterFreq maps a letter to its occurrence count.
 type letterFreq map[rune]int64
 
-// process streams r and prints letter frequencies.
-func process(r io.Reader) error {
-	freq, err := countLetters(r)
+// config holds the resolved command-line options.
+type config struct {
+	caseSensitive bool
+	sortBy        string // "count" or "alpha"
+}
+
+func main() {
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+}
+
+// run contains all program logic and returns an exit code.
+//
+// Exit codes:
+//
+// 0 - success, every input processed cleanly
+// 1 - one or more inputs failed (e.g. file not found); others still processed
+// 2 - usage error (bad flags)
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	cfg, fileArgs, err := parseFlags(args, stderr)
 	if err != nil {
-		return err
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
 	}
-	printFreq(freq)
-	return nil
-}
 
-// countLetters reads one rune at a time via bufio.Reader,
-// so memory use stays constant regardless of input size.
-func countLetters(r io.Reader) (letterFreq, error) {
-	br := bufio.NewReaderSize(r, 64*1024)
 	freq := make(letterFreq, 64)
+	var total int64
+	hadError := false
 
-	for {
-		ru, _, err := br.ReadRune()
+	if len(fileArgs) == 0 {
+		fileArgs = []string{"-"} // no args: read stdin
+	}
+
+	for _, name := range fileArgs {
+		n, err := accumulate(name, stdin, cfg.caseSensitive, freq)
+		total += n
 		if err != nil {
-			if err == io.EOF {
-				return freq, nil
-			}
-			return nil, err
-		}
-
-		if !unicode.IsLetter(ru) {
-			continue // skip whitespace, digits, punctuation, etc.
-		}
-		freq[unicode.ToLower(ru)]++
-	}
-}
-
-// printFreq prints results sorted by letter.
-func printFreq(freq letterFreq) {
-	letters := make([]rune, 0, len(freq))
-	for r := range freq {
-		letters = append(letters, r)
-	}
-	sort.Slice(letters, func(i, j int) bool { return letters[i] < letters[j] })
-
-	for _, r := range letters {
-		fmt.Printf("%c: %d\n", r, freq[r])
-	}
-}
-
-func run(args []string) error {
-	if len(args) == 0 {
-		return process(os.Stdin)
-	}
-
-	var firstErr error
-	for _, name := range args {
-		if err := processArg(name); err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %v\n", name, err)
-			if firstErr == nil {
-				firstErr = err
-			}
+			fmt.Fprintf(stderr, "freaks: %v\n", err)
+			hadError = true
 		}
 	}
-	return firstErr
+
+	printFreq(stdout, freq, total, cfg.sortBy)
+
+	if hadError {
+		return 1
+	}
+	return 0
 }
 
-func processArg(name string) error {
+// parseFlags defines and parses the CLI flags, writing usage output to stderr on error.
+func parseFlags(args []string, stderr io.Writer) (config, []string, error) {
+	fs := flag.NewFlagSet("freaks", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	caseSensitive := fs.Bool("case-sensitive", false,
+		"count uppercase and lowercase letters separately (default: fold to lowercase)")
+	sortBy := fs.String("sort", "count",
+		`order results by "count" (most frequent first) or "alpha" (alphabetical)`)
+
+	fs.Usage = func() {
+		fmt.Fprintf(stderr, "Usage: freaks [flags] [file...]\n")
+		fmt.Fprintf(stderr, "Reports letter frequency for the given files, or stdin if none are given.\n")
+		fmt.Fprintf(stderr, "Use \"-\" to read stdin explicitly (e.g. alongside other files).\n\n")
+		fs.PrintDefaults()
+	}
+
+	if err := fs.Parse(args); err != nil {
+		return config{}, nil, err
+	}
+
+	if *sortBy != "count" && *sortBy != "alpha" {
+		fmt.Fprintf(stderr, "freaks: invalid -sort value %q (want \"count\" or \"alpha\")\n", *sortBy)
+		fs.Usage()
+		return config{}, nil, errInvalidFlagValue
+	}
+
+	return config{caseSensitive: *caseSensitive, sortBy: *sortBy}, fs.Args(), nil
+}
+
+// accumulate opens name (or stdin, for "-") and folds its letter counts into freq.
+// It returns the number of letters counted from this input.
+func accumulate(name string, stdin io.Reader, caseSensitive bool, freq letterFreq) (int64, error) {
 	if name == "-" {
-		return process(os.Stdin)
+		n, err := countLetters(stdin, caseSensitive, freq)
+		if err != nil {
+			return n, fmt.Errorf("standard input: %w", err)
+		}
+		return n, nil
 	}
 
 	f, err := os.Open(name)
 	if err != nil {
-		return err
+		return 0, fmt.Errorf("%s: %w", name, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
-	return process(f)
+	n, err := countLetters(f, caseSensitive, freq)
+	if err != nil {
+		return n, fmt.Errorf("%s: %w", name, err)
+	}
+	return n, nil
 }
 
-func main() {
-	if err := run(os.Args[1:]); err != nil {
-		os.Exit(1)
+// countLetters streams r rune-by-rune, tallying letters into freq.
+func countLetters(r io.Reader, caseSensitive bool, freq letterFreq) (int64, error) {
+	br := bufio.NewReaderSize(r, 64*1024)
+	var n int64
+
+	for {
+		ru, _, err := br.ReadRune()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return n, nil
+			}
+			return n, err
+		}
+
+		if !unicode.IsLetter(ru) {
+			continue
+		}
+		if !caseSensitive {
+			ru = unicode.ToLower(ru)
+		}
+		freq[ru]++
+		n++
+	}
+}
+
+// printFreq writes one line per letter
+func printFreq(w io.Writer, freq letterFreq, total int64, sortBy string) {
+	letters := make([]rune, 0, len(freq))
+	for r := range freq {
+		letters = append(letters, r)
+	}
+
+	switch sortBy {
+	case "alpha":
+		sort.Slice(letters, func(i, j int) bool { return letters[i] < letters[j] })
+	default: // "count"
+		sort.Slice(letters, func(i, j int) bool {
+			if freq[letters[i]] != freq[letters[j]] {
+				return freq[letters[i]] > freq[letters[j]] // descending
+			}
+			return letters[i] < letters[j] // stable tie-break
+		})
+	}
+
+	for _, r := range letters {
+		count := freq[r]
+		var pct float64
+		if total > 0 {
+			pct = float64(count) / float64(total) * 100
+		}
+		fmt.Fprintf(w, "%c %.2f%% %d\n", r, pct, count)
 	}
 }
