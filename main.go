@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 	"unicode"
 )
@@ -182,20 +181,18 @@ func printFreq(w io.Writer, freq letterFreq, total int64, sortBy string, graph b
 		})
 	}
 
-	countWidth := len(strconv.FormatInt(maxCount, 10))
-
-	for _, r := range letters {
-		count := freq[r]
+	for _, v := range letters {
+		count := freq[v]
 		var pct float64
 		if total > 0 {
 			pct = float64(count) / float64(total) * 100
 		}
 
 		if !graph {
-			fmt.Fprintf(w, "%c %.2f%% %d\n", r, pct, count)
+			fmt.Fprintf(w, "%c\t%.2f%%\t%d\n", v, pct, count)
 			continue
 		}
-		fmt.Fprintf(w, "%c %6.2f%% %*d %s\n", r, pct, countWidth, count, bar(count, maxCount))
+		fmt.Fprintf(w, "%c\t%.2f%%\t%d\t%s\n", v, pct, count, bar(count, maxCount))
 	}
 }
 
