@@ -27,11 +27,11 @@ type config struct {
 	graph         bool
 }
 
-// graphChar fills --graph bars.
+// graphChar fills graph bars.
 const graphChar = '■'
 
-// maxBarLen is the bar length in characters for a 100% value.
-const maxBarLen = 10
+// maxBarLen is the bar length in characters for the most frequent letter.
+const maxBarLen = 20
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
@@ -88,7 +88,7 @@ func parseFlags(args []string, stderr io.Writer) (config, []string, error) {
 	sortBy := fs.String("sort", "count",
 		`order results by "count" (most frequent first) or "alpha" (alphabetical)`)
 	graph := fs.Bool("graph", false,
-		"append a fixed-scale ASCII bar (1-10 chars) after the count")
+		"append a relative-scale ASCII bar (1-20 chars) after the count")
 
 	fs.Usage = func() {
 		fmt.Fprintf(stderr, "Usage: freaks [flags] [file...]\n")
@@ -195,13 +195,16 @@ func printFreq(w io.Writer, freq letterFreq, total int64, sortBy string, graph b
 			fmt.Fprintf(w, "%c %.2f%% %d\n", r, pct, count)
 			continue
 		}
-		fmt.Fprintf(w, "%c %6.2f%% %*d %s\n", r, pct, countWidth, count, bar(pct))
+		fmt.Fprintf(w, "%c %6.2f%% %*d %s\n", r, pct, countWidth, count, bar(count, maxCount))
 	}
 }
 
-// bar renders the percentage on a fixed 0-100% scale to a 1-10 character bar.
-func bar(pct float64) string {
-	n := int(pct/100*maxBarLen + 0.5) // round to nearest
+// bar renders graph relative to maxCount as a 1-20 character bar
+func bar(count, maxCount int64) string {
+	n := maxBarLen
+	if maxCount > 0 && count != maxCount {
+		n = int(float64(count)/float64(maxCount)*maxBarLen + 0.5) // round to nearest
+	}
 	if n < 1 {
 		n = 1
 	}
