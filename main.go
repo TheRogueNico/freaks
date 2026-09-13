@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
+	"strings"
 	"unicode"
 )
 
@@ -22,7 +24,14 @@ type letterFreq map[rune]int64
 type config struct {
 	caseSensitive bool
 	sortBy        string // "count" or "alpha"
+	graph         bool
 }
+
+// graphChar fills --graph bars.
+const graphChar = '■'
+
+// maxBarLen is the bar length in characters for a 100% value.
+const maxBarLen = 10
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
@@ -61,7 +70,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 	}
 
-	printFreq(stdout, freq, total, cfg.sortBy)
+	printFreq(stdout, freq, total, cfg.sortBy, cfg.graph)
 
 	if hadError {
 		return 1
@@ -78,6 +87,8 @@ func parseFlags(args []string, stderr io.Writer) (config, []string, error) {
 		"count uppercase and lowercase letters separately (default: fold to lowercase)")
 	sortBy := fs.String("sort", "count",
 		`order results by "count" (most frequent first) or "alpha" (alphabetical)`)
+	graph := fs.Bool("graph", false,
+		"append a fixed-scale ASCII bar (1-10 chars) after the count")
 
 	fs.Usage = func() {
 		fmt.Fprintf(stderr, "Usage: freaks [flags] [file...]\n")
@@ -96,7 +107,7 @@ func parseFlags(args []string, stderr io.Writer) (config, []string, error) {
 		return config{}, nil, errInvalidFlagValue
 	}
 
-	return config{caseSensitive: *caseSensitive, sortBy: *sortBy}, fs.Args(), nil
+	return config{caseSensitive: *caseSensitive, sortBy: *sortBy, graph: *graph}, fs.Args(), nil
 }
 
 // accumulate opens name (or stdin, for "-") and folds its letter counts into freq.
@@ -148,11 +159,15 @@ func countLetters(r io.Reader, caseSensitive bool, freq letterFreq) (int64, erro
 	}
 }
 
-// printFreq writes one line per letter
-func printFreq(w io.Writer, freq letterFreq, total int64, sortBy string) {
+// printFreq writes one line per letter.
+func printFreq(w io.Writer, freq letterFreq, total int64, sortBy string, graph bool) {
 	letters := make([]rune, 0, len(freq))
-	for r := range freq {
+	var maxCount int64
+	for r, count := range freq {
 		letters = append(letters, r)
+		if count > maxCount {
+			maxCount = count
+		}
 	}
 
 	switch sortBy {
@@ -167,12 +182,31 @@ func printFreq(w io.Writer, freq letterFreq, total int64, sortBy string) {
 		})
 	}
 
+	countWidth := len(strconv.FormatInt(maxCount, 10))
+
 	for _, r := range letters {
 		count := freq[r]
 		var pct float64
 		if total > 0 {
 			pct = float64(count) / float64(total) * 100
 		}
-		fmt.Fprintf(w, "%c %.2f%% %d\n", r, pct, count)
+
+		if !graph {
+			fmt.Fprintf(w, "%c %.2f%% %d\n", r, pct, count)
+			continue
+		}
+		fmt.Fprintf(w, "%c %6.2f%% %*d %s\n", r, pct, countWidth, count, bar(pct))
 	}
+}
+
+// bar renders the percentage on a fixed 0-100% scale to a 1-10 character bar.
+func bar(pct float64) string {
+	n := int(pct/100*maxBarLen + 0.5) // round to nearest
+	if n < 1 {
+		n = 1
+	}
+	if n > maxBarLen {
+		n = maxBarLen
+	}
+	return strings.Repeat(string(graphChar), n)
 }
